@@ -1,6 +1,4 @@
-const apiBase = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
-
-export const photoSource = (url) => url.startsWith('/api/photos/') ? `${apiBase}${url}` : url;
+export const apiBase = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
 export async function request(path, token, options = {}) {
   const response = await fetch(`${apiBase}/api${path}`, {

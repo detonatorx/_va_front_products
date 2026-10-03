@@ -1,5 +1,5 @@
 import DishGallery from './DishGallery.jsx';
-import { formatPrice } from './dish.js';
+import { formatPrice } from '../../utils/dish.js';
 
 export default function DishCard({ dish, onView, onEdit }) {
   return <article className="dish-card">

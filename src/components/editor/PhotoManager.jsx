@@ -1,4 +1,4 @@
-import { photoSource } from './api.js';
+import { photoSource } from '../../utils/photo.js';
 
 export default function PhotoManager({ name, photos, pendingPhotos, pendingPrimary, busy, onSelectFile, onChangePrimary, onRemovePhoto, onRemovePending }) {
   const items = [...photos, ...pendingPhotos]

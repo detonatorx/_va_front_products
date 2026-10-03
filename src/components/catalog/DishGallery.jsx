@@ -1,6 +1,6 @@
 import { Autoplay, Navigation, Pagination } from 'swiper/modules';
 import { Swiper, SwiperSlide } from 'swiper/react';
-import { photoSource } from './api.js';
+import { photoSource } from '../../utils/photo.js';
 import 'swiper/css';
 import 'swiper/css/navigation';
 import 'swiper/css/pagination';

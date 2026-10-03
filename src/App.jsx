@@ -1,46 +1,38 @@
 import { useEffect, useState } from 'react';
-import { request } from './api.js';
-import AuthScreen from './AuthScreen.jsx';
-import Catalog from './Catalog.jsx';
-import DishEditor from './DishEditor.jsx';
+import { useQueryClient } from '@tanstack/react-query';
+import { useDishes } from './hooks/useDishes.js';
+import AuthScreen from './components/auth/AuthScreen.jsx';
+import Catalog from './components/catalog/Catalog.jsx';
+import DishEditor from './components/editor/DishEditor.jsx';
 
 export default function App() {
+  const queryClient = useQueryClient();
   const [token, setToken] = useState('');
-  const [dishes, setDishes] = useState([]);
   const [editorDish, setEditorDish] = useState(undefined);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [authError, setAuthError] = useState('');
+  const { data: dishes = [], isPending, error } = useDishes(token);
 
   useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    setLoading(true);
-    request('/dishes', token).then((data) => {
-      if (!cancelled) { setDishes(data); setError(''); }
-    }).catch((reason) => {
-      if (!cancelled) { setError(reason.message); setLoading(false); setToken(''); }
-    }).finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [token]);
-
-  function saveDish(dish) {
-    setDishes((current) => current.some((item) => item.id === dish.id)
-      ? current.map((item) => item.id === dish.id ? dish : item) : [dish, ...current]);
-  }
+    if (!token || !error) return;
+    setAuthError(error.message);
+    setEditorDish(undefined);
+    setToken('');
+    queryClient.clear();
+  }, [token, error, queryClient]);
 
   function logout() {
     setEditorDish(undefined);
     setToken('');
-    setDishes([]);
+    setAuthError('');
+    queryClient.clear();
   }
 
-  if (!token) return <AuthScreen loading={loading} error={error} onLogin={(value) => { setError(''); setToken(value); }} />;
+  if (!token) return <AuthScreen error={authError} onLogin={(value) => { setAuthError(''); setToken(value); }} />;
 
   return <>
-    <Catalog dishes={dishes} loading={loading} error={error} onAdd={() => setEditorDish(null)}
+    <Catalog dishes={dishes} loading={isPending} onAdd={() => setEditorDish(null)}
       onEdit={setEditorDish} onLogout={logout} />
-    {editorDish !== undefined && <DishEditor dish={editorDish} token={token} onSaved={saveDish}
-      onDeleted={(id) => setDishes((current) => current.filter((item) => item.id !== id))}
+    {editorDish !== undefined && <DishEditor dish={editorDish} token={token}
       onClose={() => setEditorDish(undefined)} />}
   </>;
 }

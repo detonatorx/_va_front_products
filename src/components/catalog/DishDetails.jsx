@@ -1,5 +1,5 @@
 import DishGallery from './DishGallery.jsx';
-import { formatPrice } from './dish.js';
+import { formatPrice } from '../../utils/dish.js';
 
 export default function DishDetails({ dish, onClose, onEdit }) {
   return <div className="detail-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
