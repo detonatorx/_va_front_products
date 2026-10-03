@@ -27,12 +27,29 @@ export default function App() {
     queryClient.clear();
   }
 
-  if (!token) return <AuthScreen error={authError} onLogin={(value) => { setAuthError(''); setToken(value); }} />;
+  if (!token)
+    return (
+      <AuthScreen
+        error={authError}
+        onLogin={(value) => {
+          setAuthError('');
+          setToken(value);
+        }}
+      />
+    );
 
-  return <>
-    <Catalog dishes={dishes} loading={isPending} onAdd={() => setEditorDish(null)}
-      onEdit={setEditorDish} onLogout={logout} />
-    {editorDish !== undefined && <DishEditor dish={editorDish} token={token}
-      onClose={() => setEditorDish(undefined)} />}
-  </>;
+  return (
+    <>
+      <Catalog
+        dishes={dishes}
+        loading={isPending}
+        onAdd={() => setEditorDish(null)}
+        onEdit={setEditorDish}
+        onLogout={logout}
+      />
+      {editorDish !== undefined && (
+        <DishEditor dish={editorDish} token={token} onClose={() => setEditorDish(undefined)} />
+      )}
+    </>
+  );
 }
