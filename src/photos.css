@@ -354,6 +354,14 @@ textarea[aria-invalid='true'] {
   background: #f2f1ed;
 }
 
+.crop-actions .reset-button {
+  border: 0;
+  background: none;
+  color: #ad5548;
+  font-weight: 700;
+  margin-right: auto;
+}
+
 @media (max-width: 600px) {
   .photo-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));

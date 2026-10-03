@@ -22,16 +22,31 @@ export default function DishEditor({ dish, token, onClose }) {
   const [editingId, setEditingId] = useState(dish?.id || null);
   const [pendingPhotos, setPendingPhotos] = useState([]);
   const [pendingPrimary, setPendingPrimary] = useState(null);
-  const [cropFile, setCropFile] = useState(null);
-  const { saveDish, uploadPhoto, setPrimaryPhoto, deletePhoto, deleteDish } =
-    useDishMutations(token);
+  const [cropTarget, setCropTarget] = useState(null);
+  const {
+    saveDish,
+    uploadPhoto,
+    loadCurrentPhoto,
+    loadOriginalPhoto,
+    editPhoto,
+    setPrimaryPhoto,
+    deletePhoto,
+    deleteDish
+  } = useDishMutations(token);
   const photos = watch('photos') || [];
   const name = watch('name');
   const busy =
     isSubmitting ||
-    [saveDish, uploadPhoto, setPrimaryPhoto, deletePhoto, deleteDish].some(
-      (mutation) => mutation.isPending
-    );
+    [
+      saveDish,
+      uploadPhoto,
+      loadCurrentPhoto,
+      loadOriginalPhoto,
+      editPhoto,
+      setPrimaryPhoto,
+      deletePhoto,
+      deleteDish
+    ].some((mutation) => mutation.isPending);
   const showError = (reason) => setError('root.server', { message: reason.message });
 
   function updateDish(updated) {
@@ -60,14 +75,48 @@ export default function DishEditor({ dish, token, onClose }) {
       return;
     }
     clearErrors('root.server');
-    setCropFile(file);
+    setCropTarget({ file, photo: null });
   }
 
-  function addCropped(blob) {
-    const photo = { id: crypto.randomUUID(), blob, url: URL.createObjectURL(blob) };
-    setPendingPhotos((current) => [...current, photo]);
-    if (!photos.length && !pendingPhotos.length) setPendingPrimary(photo.id);
-    setCropFile(null);
+  async function editExistingPhoto(photo) {
+    clearErrors('root.server');
+    try {
+      const file = photo.blob ? photo.blob : await loadCurrentPhoto.mutateAsync(photo);
+      setCropTarget({ file, photo });
+    } catch (reason) {
+      showError(reason);
+    }
+  }
+
+  async function saveCropped(blob) {
+    const target = cropTarget.photo;
+    if (!target) {
+      const photo = {
+        id: crypto.randomUUID(),
+        blob,
+        original: cropTarget.file,
+        url: URL.createObjectURL(blob)
+      };
+      setPendingPhotos((current) => [...current, photo]);
+      if (!photos.length && !pendingPhotos.length) setPendingPrimary(photo.id);
+    } else if (target.blob) {
+      URL.revokeObjectURL(target.url);
+      setPendingPhotos((current) =>
+        current.map((photo) =>
+          photo.id === target.id ? { ...photo, blob, url: URL.createObjectURL(blob) } : photo
+        )
+      );
+    } else {
+      updateDish(await editPhoto.mutateAsync({ dishId: editingId, photoId: target.id, blob }));
+    }
+    setCropTarget(null);
+  }
+
+  function loadOriginalForEditor() {
+    const target = cropTarget.photo;
+    return target.blob
+      ? target.original
+      : loadOriginalPhoto.mutateAsync({ dishId: editingId, photoId: target.id });
   }
 
   function removePending(photo) {
@@ -109,7 +158,11 @@ export default function DishEditor({ dish, token, onClose }) {
       setEditingId(saved.id);
       for (const photo of pendingPhotos) {
         const before = new Set(saved.photos.map((item) => item.id));
-        saved = await uploadPhoto.mutateAsync({ dishId: saved.id, blob: photo.blob });
+        saved = await uploadPhoto.mutateAsync({
+          dishId: saved.id,
+          blob: photo.blob,
+          original: photo.original
+        });
         updateDish(saved);
         setPendingPhotos((current) => current.filter((item) => item.id !== photo.id));
         URL.revokeObjectURL(photo.url);
@@ -151,7 +204,7 @@ export default function DishEditor({ dish, token, onClose }) {
       <div
         className="modal-backdrop"
         onMouseDown={(event) => {
-          if (event.target === event.currentTarget && !busy && !cropFile) close();
+          if (event.target === event.currentTarget && !busy && !cropTarget) close();
         }}
       >
         <section className="editor" role="dialog" aria-modal="true" aria-labelledby="editor-title">
@@ -241,6 +294,7 @@ export default function DishEditor({ dish, token, onClose }) {
                 busy={busy}
                 onSelectFile={selectFile}
                 onChangePrimary={changePrimary}
+                onEditPhoto={editExistingPhoto}
                 onRemovePhoto={removePhoto}
                 onRemovePending={removePending}
               />
@@ -273,8 +327,14 @@ export default function DishEditor({ dish, token, onClose }) {
           </form>
         </section>
       </div>
-      {cropFile && (
-        <CropEditor file={cropFile} onCancel={() => setCropFile(null)} onSave={addCropped} />
+      {cropTarget && (
+        <CropEditor
+          file={cropTarget.file}
+          editing={Boolean(cropTarget.photo)}
+          onCancel={() => setCropTarget(null)}
+          onSave={saveCropped}
+          onReset={loadOriginalForEditor}
+        />
       )}
     </>
   );

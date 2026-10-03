@@ -8,6 +8,7 @@ export default function PhotoManager({
   busy,
   onSelectFile,
   onChangePrimary,
+  onEditPhoto,
   onRemovePhoto,
   onRemovePending
 }) {
@@ -41,6 +42,11 @@ export default function PhotoManager({
                 ) : (
                   <button type="button" disabled={busy} onClick={() => onChangePrimary(photo)}>
                     Сделать главным
+                  </button>
+                )}
+                {(photo.blob || photo.can_edit) && (
+                  <button type="button" disabled={busy} onClick={() => onEditPhoto(photo)}>
+                    Изменить фото
                   </button>
                 )}
                 <button

@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { request } from '../api/client.js';
+import { request, requestBlob } from '../api/client.js';
 import { dishesQueryKey } from './useDishes.js';
 
 export function useDishMutations(token) {
@@ -21,10 +21,32 @@ export function useDishMutations(token) {
   });
 
   const uploadPhoto = useMutation({
-    mutationFn: ({ dishId, blob }) => {
+    mutationFn: ({ dishId, blob, original }) => {
       const data = new FormData();
       data.append('photo', blob, 'dish.jpg');
+      data.append('original', original, original.name || 'original.jpg');
       return request(`/dishes/${dishId}/photos`, token, { method: 'POST', body: data });
+    },
+    onSuccess: upsert
+  });
+
+  const loadCurrentPhoto = useMutation({
+    mutationFn: (photo) => requestBlob(photo.url.replace(/^\/api/, ''), token)
+  });
+
+  const loadOriginalPhoto = useMutation({
+    mutationFn: ({ dishId, photoId }) =>
+      requestBlob(`/dishes/${dishId}/photos/${photoId}/original`, token)
+  });
+
+  const editPhoto = useMutation({
+    mutationFn: ({ dishId, photoId, blob }) => {
+      const data = new FormData();
+      data.append('photo', blob, 'dish.jpg');
+      return request(`/dishes/${dishId}/photos/${photoId}`, token, {
+        method: 'PUT',
+        body: data
+      });
     },
     onSuccess: upsert
   });
@@ -49,5 +71,14 @@ export function useDishMutations(token) {
       )
   });
 
-  return { saveDish, uploadPhoto, setPrimaryPhoto, deletePhoto, deleteDish };
+  return {
+    saveDish,
+    uploadPhoto,
+    loadCurrentPhoto,
+    loadOriginalPhoto,
+    editPhoto,
+    setPrimaryPhoto,
+    deletePhoto,
+    deleteDish
+  };
 }

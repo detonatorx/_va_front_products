@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 
+const fullCrop = { unit: '%', x: 0, y: 0, width: 100, height: 100 };
+
 function initialCrop(image, ratio) {
   return ratio
     ? centerCrop(
@@ -12,8 +14,10 @@ function initialCrop(image, ratio) {
     : { unit: '%', x: 5, y: 5, width: 90, height: 90 };
 }
 
-export default function CropEditor({ file, onSave, onCancel }) {
+export default function CropEditor({ file, editing = false, onSave, onReset, onCancel }) {
+  const [sourceFile, setSourceFile] = useState(file);
   const [source, setSource] = useState('');
+  const [usingOriginal, setUsingOriginal] = useState(false);
   const [image, setImage] = useState(null);
   const [crop, setCrop] = useState();
   const [ratio, setRatio] = useState('free');
@@ -23,10 +27,10 @@ export default function CropEditor({ file, onSave, onCancel }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const url = URL.createObjectURL(file);
+    const url = URL.createObjectURL(sourceFile);
     setSource(url);
     return () => URL.revokeObjectURL(url);
-  }, [file]);
+  }, [sourceFile]);
 
   const customAspect = Number(width) / Number(height);
   const aspect =
@@ -99,7 +103,24 @@ export default function CropEditor({ file, onSave, onCancel }) {
       );
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.88));
       if (!blob) throw new Error('Не удалось сохранить обрезанное фото');
-      onSave(blob);
+      await onSave(blob);
+    } catch (reason) {
+      setError(reason.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reset() {
+    setBusy(true);
+    setError('');
+    try {
+      const original = await onReset();
+      setRatio('free');
+      setCrop(undefined);
+      setImage(null);
+      setUsingOriginal(true);
+      setSourceFile(original);
     } catch (reason) {
       setError(reason.message);
     } finally {
@@ -112,8 +133,8 @@ export default function CropEditor({ file, onSave, onCancel }) {
       <section className="crop-dialog" role="dialog" aria-modal="true" aria-labelledby="crop-title">
         <div className="crop-head">
           <div>
-            <span className="eyebrow">НОВОЕ ФОТО</span>
-            <h2 id="crop-title">Обрезать фото</h2>
+            <span className="eyebrow">{editing ? 'РЕДАКТИРОВАНИЕ ФОТО' : 'НОВОЕ ФОТО'}</span>
+            <h2 id="crop-title">{editing ? 'Изменить обрезку' : 'Обрезать фото'}</h2>
           </div>
           <button
             type="button"
@@ -149,7 +170,7 @@ export default function CropEditor({ file, onSave, onCancel }) {
                       return;
                     }
                     setImage(event.currentTarget);
-                    setCrop(initialCrop(event.currentTarget, aspect));
+                    setCrop(editing ? { ...fullCrop } : initialCrop(event.currentTarget, aspect));
                   }}
                 />
               </ReactCrop>
@@ -205,11 +226,21 @@ export default function CropEditor({ file, onSave, onCancel }) {
           )}
         </div>
         <div className="crop-actions">
+          {editing && (
+            <button
+              type="button"
+              className="reset-button"
+              onClick={reset}
+              disabled={busy || usingOriginal}
+            >
+              {usingOriginal ? 'Исходное загружено' : 'Сбросить к исходному'}
+            </button>
+          )}
           <button type="button" className="button subtle" onClick={onCancel} disabled={busy}>
             Отмена
           </button>
           <button type="button" className="button primary" onClick={apply} disabled={busy}>
-            Добавить фото
+            {editing ? 'Сохранить изменения' : 'Добавить фото'}
           </button>
         </div>
       </section>
