@@ -57,6 +57,15 @@ export function useDishMutations(token) {
     onSuccess: upsert
   });
 
+  const reorderPhotos = useMutation({
+    mutationFn: ({ dishId, photoIds }) =>
+      request(`/dishes/${dishId}/photos/order`, token, {
+        method: 'PATCH',
+        body: JSON.stringify({ photo_ids: photoIds })
+      }),
+    onSuccess: upsert
+  });
+
   const deletePhoto = useMutation({
     mutationFn: ({ dishId, photoId }) =>
       request(`/dishes/${dishId}/photos/${photoId}`, token, { method: 'DELETE' }),
@@ -78,6 +87,7 @@ export function useDishMutations(token) {
     loadOriginalPhoto,
     editPhoto,
     setPrimaryPhoto,
+    reorderPhotos,
     deletePhoto,
     deleteDish
   };

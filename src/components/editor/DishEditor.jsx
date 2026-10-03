@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { emptyDish, parsePrice, toForm, toPayload } from '../../utils/dish.js';
 import { useDishMutations } from '../../hooks/useDishMutations.js';
+import { orderPhotos } from '../../utils/photoOrder.mjs';
 import CropEditor from './CropEditor.jsx';
 import PhotoManager from './PhotoManager.jsx';
 
@@ -21,19 +22,21 @@ export default function DishEditor({ dish, token, onClose }) {
   });
   const [editingId, setEditingId] = useState(dish?.id || null);
   const [pendingPhotos, setPendingPhotos] = useState([]);
-  const [pendingPrimary, setPendingPrimary] = useState(null);
+  const [photoOrder, setPhotoOrder] = useState(() => (dish?.photos || []).map((photo) => photo.id));
   const [cropTarget, setCropTarget] = useState(null);
+  const [cropQueue, setCropQueue] = useState([]);
   const {
     saveDish,
     uploadPhoto,
     loadCurrentPhoto,
     loadOriginalPhoto,
     editPhoto,
-    setPrimaryPhoto,
+    reorderPhotos,
     deletePhoto,
     deleteDish
   } = useDishMutations(token);
   const photos = watch('photos') || [];
+  const orderedPhotos = orderPhotos([...photos, ...pendingPhotos], photoOrder);
   const name = watch('name');
   const busy =
     isSubmitting ||
@@ -43,7 +46,7 @@ export default function DishEditor({ dish, token, onClose }) {
       loadCurrentPhoto,
       loadOriginalPhoto,
       editPhoto,
-      setPrimaryPhoto,
+      reorderPhotos,
       deletePhoto,
       deleteDish
     ].some((mutation) => mutation.isPending);
@@ -59,23 +62,25 @@ export default function DishEditor({ dish, token, onClose }) {
     onClose();
   }
 
-  function selectFile(event) {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
+  function selectFiles(files) {
+    if (!files.length) return;
     if (
-      !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
-      file.size > 10 * 1024 * 1024
+      files.some(
+        (file) =>
+          !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
+          file.size > 10 * 1024 * 1024
+      )
     ) {
       showError(new Error('Выберите JPEG, PNG или WebP размером до 10 МБ'));
       return;
     }
-    if (photos.length + pendingPhotos.length >= 10) {
+    if (photos.length + pendingPhotos.length + files.length > 10) {
       showError(new Error('Не более 10 фото на блюдо'));
       return;
     }
     clearErrors('root.server');
-    setCropTarget({ file, photo: null });
+    setCropQueue(files.slice(1));
+    setCropTarget({ file: files[0], photo: null });
   }
 
   async function editExistingPhoto(photo) {
@@ -98,7 +103,7 @@ export default function DishEditor({ dish, token, onClose }) {
         url: URL.createObjectURL(blob)
       };
       setPendingPhotos((current) => [...current, photo]);
-      if (!photos.length && !pendingPhotos.length) setPendingPrimary(photo.id);
+      setPhotoOrder((current) => [...current, photo.id]);
     } else if (target.blob) {
       URL.revokeObjectURL(target.url);
       setPendingPhotos((current) =>
@@ -109,7 +114,8 @@ export default function DishEditor({ dish, token, onClose }) {
     } else {
       updateDish(await editPhoto.mutateAsync({ dishId: editingId, photoId: target.id, blob }));
     }
-    setCropTarget(null);
+    setCropTarget(cropQueue.length ? { file: cropQueue[0], photo: null } : null);
+    setCropQueue((current) => current.slice(1));
   }
 
   function loadOriginalForEditor() {
@@ -123,21 +129,30 @@ export default function DishEditor({ dish, token, onClose }) {
     URL.revokeObjectURL(photo.url);
     const rest = pendingPhotos.filter((item) => item.id !== photo.id);
     setPendingPhotos(rest);
-    if (pendingPrimary === photo.id) setPendingPrimary(rest[0]?.id || null);
+    setPhotoOrder((current) => current.filter((id) => id !== photo.id));
   }
 
-  async function changePrimary(photo) {
-    if (photo.blob) {
-      setPendingPrimary(photo.id);
-      return;
-    }
+  async function changePhotoOrder(nextOrder) {
+    if (busy) return;
+    const previousOrder = orderedPhotos.map((photo) => photo.id);
+    setPhotoOrder(nextOrder);
     clearErrors('root.server');
+    const savedIds = new Set(photos.map((photo) => photo.id));
+    const savedOrder = nextOrder.filter((id) => savedIds.has(id));
+    if (!editingId || !savedOrder.length) return;
     try {
-      updateDish(await setPrimaryPhoto.mutateAsync({ dishId: editingId, photoId: photo.id }));
-      setPendingPrimary(null);
+      updateDish(await reorderPhotos.mutateAsync({ dishId: editingId, photoIds: savedOrder }));
     } catch (reason) {
+      setPhotoOrder(previousOrder);
       showError(reason);
     }
+  }
+
+  function changePrimary(photo) {
+    return changePhotoOrder([
+      photo.id,
+      ...orderedPhotos.filter((item) => item.id !== photo.id).map((item) => item.id)
+    ]);
   }
 
   async function removePhoto(photo) {
@@ -145,6 +160,7 @@ export default function DishEditor({ dish, token, onClose }) {
     clearErrors('root.server');
     try {
       updateDish(await deletePhoto.mutateAsync({ dishId: editingId, photoId: photo.id }));
+      setPhotoOrder((current) => current.filter((id) => id !== photo.id));
     } catch (reason) {
       showError(reason);
     }
@@ -153,6 +169,7 @@ export default function DishEditor({ dish, token, onClose }) {
   async function save(values) {
     clearErrors('root.server');
     try {
+      const savedOrder = orderedPhotos.map((photo) => photo.id);
       let saved = await saveDish.mutateAsync({ id: editingId, payload: toPayload(values) });
       updateDish(saved);
       setEditingId(saved.id);
@@ -164,14 +181,14 @@ export default function DishEditor({ dish, token, onClose }) {
           original: photo.original
         });
         updateDish(saved);
+        const uploaded = saved.photos.find((item) => !before.has(item.id));
+        savedOrder[savedOrder.indexOf(photo.id)] = uploaded.id;
+        setPhotoOrder((current) => current.map((id) => (id === photo.id ? uploaded.id : id)));
         setPendingPhotos((current) => current.filter((item) => item.id !== photo.id));
         URL.revokeObjectURL(photo.url);
-        if (pendingPrimary === photo.id) {
-          const uploaded = saved.photos.find((item) => !before.has(item.id));
-          saved = await setPrimaryPhoto.mutateAsync({ dishId: saved.id, photoId: uploaded.id });
-          updateDish(saved);
-          setPendingPrimary(null);
-        }
+      }
+      if (savedOrder.length) {
+        updateDish(await reorderPhotos.mutateAsync({ dishId: saved.id, photoIds: savedOrder }));
       }
       close();
     } catch (reason) {
@@ -288,12 +305,11 @@ export default function DishEditor({ dish, token, onClose }) {
               <input type="hidden" {...register('image_url')} />
               <PhotoManager
                 name={name}
-                photos={photos}
-                pendingPhotos={pendingPhotos}
-                pendingPrimary={pendingPrimary}
+                items={orderedPhotos}
                 busy={busy}
-                onSelectFile={selectFile}
+                onSelectFiles={selectFiles}
                 onChangePrimary={changePrimary}
+                onReorder={changePhotoOrder}
                 onEditPhoto={editExistingPhoto}
                 onRemovePhoto={removePhoto}
                 onRemovePending={removePending}
@@ -329,9 +345,13 @@ export default function DishEditor({ dish, token, onClose }) {
       </div>
       {cropTarget && (
         <CropEditor
+          key={cropTarget.photo?.id || `${cropTarget.file.name}-${cropQueue.length}`}
           file={cropTarget.file}
           editing={Boolean(cropTarget.photo)}
-          onCancel={() => setCropTarget(null)}
+          onCancel={() => {
+            setCropTarget(null);
+            setCropQueue([]);
+          }}
           onSave={saveCropped}
           onReset={loadOriginalForEditor}
         />
