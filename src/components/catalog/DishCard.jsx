@@ -1,5 +1,4 @@
-import Eye from 'react-tabler-icons/dist/Eye.js';
-import Edit from 'react-tabler-icons/dist/Edit.js';
+import { IconEdit, IconEye } from '@tabler/icons-react';
 import DishGallery from './DishGallery.jsx';
 import { formatPrice } from '../../utils/dish.js';
 
@@ -27,7 +26,7 @@ export default function DishCard({ dish, onView, onEdit }) {
               aria-label={`Открыть ${dish.name}`}
               title="Просмотр"
             >
-              <Eye width={22} height={22} />
+              <IconEye size={22} />
             </button>
             <button
               className="icon-button"
@@ -35,7 +34,7 @@ export default function DishCard({ dish, onView, onEdit }) {
               aria-label={`Редактировать ${dish.name}`}
               title="Изменить"
             >
-              <Edit width={22} height={22} />
+              <IconEdit size={22} />
             </button>
           </div>
         </div>
